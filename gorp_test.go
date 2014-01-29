@@ -64,6 +64,12 @@ type WithIgnoredColumn struct {
 	Created  int64
 }
 
+type WithSelectOnlyColumn struct {
+	SelectOnly *int64 `db:",selectonly"`
+	Id         int64
+	Created    int64
+}
+
 type WithStringPk struct {
 	Id   string
 	Name string
@@ -974,6 +980,47 @@ func TestWithIgnoredColumn(t *testing.T) {
 	}
 }
 
+func TestWithSelectOnlyColumn(t *testing.T) {
+	dbmap := initDbMap()
+	defer dbmap.DropTables()
+
+	i := int64(-1)
+	tc := &WithSelectOnlyColumn{&i, 0, 1}
+	_insert(dbmap, tc)
+	expected := &WithSelectOnlyColumn{nil, 1, 1}
+	tc2 := _get(dbmap, WithSelectOnlyColumn{}, tc.Id).(*WithSelectOnlyColumn)
+
+	if !reflect.DeepEqual(expected, tc2) {
+		t.Errorf("%v != %v", expected, tc2)
+	}
+
+	var tcs []*WithSelectOnlyColumn
+	_, err := dbmap.Select(&tcs, "SELECT 1 as SelectOnly, 2 as Id, 3 as Created")
+	if err != nil {
+		t.Errorf("Select failed with %v", err)
+		return
+	}
+	fmt.Println(tcs)
+	if len(tcs) != 1 {
+		t.Errorf("Select returned wrong number of rows")
+		return
+	}
+	i = 1
+	expected = &WithSelectOnlyColumn{&i, 2, 3}
+	if !reflect.DeepEqual(tcs[0], expected) {
+		t.Errorf("%v != %v", expected, tcs[0])
+		return
+	}
+
+	if _del(dbmap, tc) != 1 {
+		t.Errorf("Did not delete row with Id: %d", tc.Id)
+		return
+	}
+	if _get(dbmap, WithIgnoredColumn{}, tc.Id) != nil {
+		t.Errorf("Found id: %d after Delete()", tc.Id)
+	}
+}
+
 func TestTypeConversionExample(t *testing.T) {
 	dbmap := initDbMap()
 	defer dropAndClose(dbmap)
@@ -1546,6 +1593,7 @@ func initDbMap() *DbMap {
 	dbmap.AddTableWithName(OverriddenInvoice{}, "invoice_override_test").SetKeys(false, "Id")
 	dbmap.AddTableWithName(Person{}, "person_test").SetKeys(true, "Id")
 	dbmap.AddTableWithName(WithIgnoredColumn{}, "ignored_column_test").SetKeys(true, "Id")
+	dbmap.AddTableWithName(WithSelectOnlyColumn{}, "selectonly_column_test").SetKeys(true, "Id")
 	dbmap.AddTableWithName(TypeConversionExample{}, "type_conv_test").SetKeys(true, "Id")
 	dbmap.AddTableWithName(WithEmbeddedStruct{}, "embedded_struct_test").SetKeys(true, "Id")
 	dbmap.AddTableWithName(WithEmbeddedStructBeforeAutoincrField{}, "embedded_struct_before_autoincr_test").SetKeys(true, "Id")
